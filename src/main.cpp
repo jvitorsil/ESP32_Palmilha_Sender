@@ -9,7 +9,6 @@
 */
 
 /* Includes ----------------------------------------------------------------------------------------------------------*/
-
 #include <Arduino.h>
 #include <WiFi.h>
 #include <ESP32Time.h>
@@ -19,22 +18,22 @@
 #include <Preferences.h>
 
 /* Pin numbers -------------------------------------------------------------------------------------------------------*/
-
 #define PIN_READ_SENSOR 36
 
 
-#define SSID "Erro404"
-#define PASSWORD "semsenha"
+#define SSID "iPhone"
+#define PASSWORD "senhasenha"
 
-#define SERVER "192.168.100.13"
+#define SERVER "172.20.10.5"
 #define PORT 62445
+
+#define QUEU_SIZE 10
 
 /* Instances ---------------------------------------------------------------------------------------------------------*/
 
-IPAddress ip(192, 168, 100, 20); // Endereço IP fixo desejado para o ESP32
-IPAddress gateway(192, 168, 100, 1); // Endereço IP do gateway
-IPAddress subnet(255, 255, 255, 0); // Máscara de sub-rede
-
+IPAddress ip(172, 20, 10, 6); // Endereço IP fixo desejado para o ESP32
+IPAddress gateway(172, 20, 10, 1); // Endereço IP do gateway
+IPAddress subnet(255, 255, 255, 240); // Máscara de sub-rede
 
 ESP32Time rtc;
 Preferences preferences;
@@ -44,29 +43,32 @@ WiFiClient client;
 
 /* variables ---------------------------------------------------------------------------------------------------------*/
 
-  char key[20];
+char key[20];
 
-typedef struct struct_message{
+typedef struct struct_sender_packet{
   uint16_t S1, S2, S3, S4, S5, S6, S7, S8, S9;
   uint8_t hora, min, seg, mSeg;
   uint8_t battery;
 
-} struct_message;
+} struct_sender_packet;
 
-struct_message savePacket;
-struct_message getPacket;
+struct_sender_packet savePacket;
+struct_sender_packet getPacket;
 
 uint8_t queuIndex = 0;
 
+/* Private functions -------------------------------------------------------------------------------------------------*/
 
-void PutDataQueu(struct_message data);
-void GetDataQueu();
+void ReadData();
+void SendDataPacket();
 void UpdateQueuIndex();
 void TaskGetData(void *parameter);
-void SendTCPData(struct_message data);
-void ReadData();
+void PutDataQueu(struct_sender_packet data);
 
-void setup() {
+/* Main Application --------------------------------------------------------------------------------------------------*/
+
+void setup() 
+{
   Serial.begin(115200);
 
   rtc.setTime(0, 0, 0, 1, 1, 2024);
@@ -80,18 +82,28 @@ void setup() {
   while (WiFi.status() != WL_CONNECTED)
     delay(1000);
 
+  client.connect(SERVER, PORT);
+
   Serial.println("Conectado a rede...");
 
   analogReadResolution(12);
 
   preferences.begin("QueuPacket", false);
-  queuIndex = preferences.getUInt("queuIndex", 0);
+  queuIndex = preferences.getUInt("QueuIndex", 0);
 
   xTaskCreatePinnedToCore(TaskGetData, "Task", 10000, NULL, 1, NULL, 0);
 
 }
 
-void loop() {
+void loop() 
+{
+  if (!client.connect(SERVER, PORT))
+    return;
+    
+  while (client.available()) {
+    String response = client.readStringUntil('\r');
+    Serial.println("Received from server: " + response);
+  }
 }
 
 void TaskGetData(void *parameter) 
@@ -101,8 +113,8 @@ void TaskGetData(void *parameter)
     ReadData();
     PutDataQueu(savePacket);
     
-    if(queuIndex >= 9)
-      GetDataQueu();
+    if(queuIndex >= (QUEU_SIZE - 1))
+      SendDataPacket();
     
     UpdateQueuIndex();
 
@@ -110,7 +122,8 @@ void TaskGetData(void *parameter)
   }
 }
 
-void ReadData(){
+void ReadData()
+{
     savePacket.S1 = (analogRead(PIN_READ_SENSOR) << 4) + 1;
     savePacket.S2 = (analogRead(PIN_READ_SENSOR) << 4) + 2;
     savePacket.S3 = (analogRead(PIN_READ_SENSOR) << 4) + 3;
@@ -129,35 +142,32 @@ void ReadData(){
     savePacket.battery = 250;
 }
 
-void PutDataQueu(struct_message data) {
+void PutDataQueu(struct_sender_packet data) 
+{
   sprintf(key, "data%d", queuIndex);
   preferences.putBytes(key, &data, sizeof(data));
-
-  Serial.printf("%u-%u-%u | S1: %u, S2: %u... \n\r", data.hora, data.min, data.seg, data.S1, data.S2);
 }
 
-void GetDataQueu(){
-  for(int x = 0; x < 10; x++){
-  
+void SendDataPacket()
+{
+  for(int x = 0; x < QUEU_SIZE; x++)
+  {
+    if (!client.connect(SERVER, PORT))
+      return;
+
     sprintf(key, "data%d", x);
     preferences.getBytes(key, &getPacket, sizeof(getPacket));
 
+    client.write((uint8_t*)&getPacket, sizeof(getPacket));
+  
     Serial.printf("Get Data: %u | %u-%u-%u  | S1: %u, S2: %u... \n\r", x ,getPacket.hora, getPacket.min, getPacket.seg, getPacket.S1, getPacket.S2);
-
-    SendTCPData(getPacket);
+  
   }
-}
-
-void UpdateQueuIndex() {
-  queuIndex = (queuIndex + 1) % 10;
-  preferences.putUInt("queuIndex", queuIndex);
-}
-
-
-void SendTCPData(struct_message data) {
-  if (!client.connect(SERVER, PORT))
-    return;
-
-  client.write((uint8_t*)&data, sizeof(data));
   client.stop();
+}
+
+void UpdateQueuIndex() 
+{
+  queuIndex = (queuIndex + 1) % QUEU_SIZE;
+  preferences.putUInt("QueuIndex", queuIndex);
 }
