@@ -104,6 +104,37 @@ void loop()
     String response = client.readStringUntil('\r');
     Serial.println("Received from server: " + response);
   }
+// Verifique se um cliente está conectado
+  WiFiClient client = server.available();
+  if (client) {
+    // Leia os dados enviados pelo cliente
+    while (client.connected()) {
+      if (client.available()) {
+        String data = client.readStringUntil('\n');
+        
+        // Dividindo a resposta do cliente em partes
+        String[] dataParts = data.split(",");
+
+        // dados sendo mostraddos separadamente no serial
+        if (dataParts.length >= 3) {
+            String tempo = dataParts[0];
+            String intensidade = dataParts[1];
+            String ativacao = dataParts[2];
+
+            // Imprimindo cada dado separadamente no monitor serial
+            Serial.println("Tempo: " + tempo);
+            Serial.println("Intensidade: " + intensidade);
+            Serial.println("Ativação: " + ativacao);
+        }
+      }
+    }
+
+    // Feche a conexão com o cliente
+    client.stop();
+  }
+
+
+  
 }
 
 void TaskGetData(void *parameter) 
