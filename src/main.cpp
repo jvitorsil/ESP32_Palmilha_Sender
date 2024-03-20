@@ -16,13 +16,14 @@
 #include <nvs.h>
 #include <freertos/task.h>
 #include <Preferences.h>
+#include <WiFiManager.h>
 
 /* Pin numbers -------------------------------------------------------------------------------------------------------*/
 #define PIN_READ_SENSOR 36
 
 
-#define SSID "iPhone"
-#define PASSWORD "senhasenha"
+/*#define SSID "iPhone"
+#define PASSWORD "senhasenha"*/
 
 #define SERVER "172.20.10.5"
 #define PORT 62445
@@ -31,10 +32,10 @@
 
 /* Instances ---------------------------------------------------------------------------------------------------------*/
 
-IPAddress ip(172, 20, 10, 6); // Endereço IP fixo desejado para o ESP32
+/*IPAddress ip(172, 20, 10, 6); // Endereço IP fixo desejado para o ESP32
 IPAddress gateway(172, 20, 10, 1); // Endereço IP do gateway
 IPAddress subnet(255, 255, 255, 240); // Máscara de sub-rede
-
+*/
 ESP32Time rtc;
 Preferences preferences;
 
@@ -73,10 +74,9 @@ void setup()
 
   rtc.setTime(0, 0, 0, 1, 1, 2024);
 
-  WiFi.config(ip, gateway, subnet);
-
-  Serial.println(SSID);
-  WiFi.begin(SSID, PASSWORD);
+  WiFiManager wifiManager;
+  wifiManager.setSTAStaticIPConfig(IPAddress(172, 20, 10, 6), IPAddress(172, 20, 10, 1), IPAddress(255, 255, 255, 240)); // Use esta linha para configurar um IP estático
+  wifiManager.autoConnect("AP_NAME", "AP_PASSWORD"); // Use esta linha para criar um ponto de acesso e configurar a rede
 
   Serial.println("Iniciando Conexão");
   while (WiFi.status() != WL_CONNECTED)
